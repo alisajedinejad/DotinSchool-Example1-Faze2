@@ -1,51 +1,56 @@
 package Service;
 
+import Exception.DepositBalanceNotEnough;
+import Service.Handler.FileWriters;
 import model.BalanceEntity;
 import model.PayEntity;
 import model.TransactionEntity;
+import org.apache.log4j.BasicConfigurator;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
 
-public class SettleSalary extends Thread {
-    private static List<BalanceEntity> balanceEntities = null;
-    private static List<TransactionEntity> transactionEntities = new ArrayList<TransactionEntity>();
+public class SettleSalary implements Callable {
+    private static List<BalanceEntity> balanceEntities;
+    private static List<PayEntity> payEntities;
+    private static String debtorDepositNumber;
+    private List<TransactionEntity> transactionEntities = new ArrayList<TransactionEntity>();
     private PayEntity payEntity;
-    private static String debtorNumber;
-    private static BigDecimal debtorSumMoney;
-    private static boolean isWriteToTrans = false;
+    public static boolean permition = true;
+    public static int debtorCounter;
+    public static boolean debtorPermition = true;
+    public static boolean permitionForCunstructor = true;
+    public static boolean permitionForTransaction = true;
+    public static BigDecimal debtorSumMoney;
 
-    public static BigDecimal getDebtorSumMoney() {
-        return debtorSumMoney;
+    public SettleSalary() {
+        if (permitionForCunstructor) {
+            permitionForCunstructor = false;
+            for (PayEntity payEntity : this.payEntities) {
+                if (payEntity.getDepositType().equals("debtor")) {
+                    this.debtorDepositNumber = payEntity.getDepositNumber();
+                }
+            }
+        }
     }
 
-    public static void setDebtorSumMoney(BigDecimal debtorSumMoney) {
-        SettleSalary.debtorSumMoney = debtorSumMoney;
+    public static List<PayEntity> getPayEntities() {
+        return payEntities;
     }
 
-    public SettleSalary(PayEntity payEntity) {
-        this.payEntity = payEntity;
+    public static void setPayEntities(List<PayEntity> payEntities) {
+        SettleSalary.payEntities = payEntities;
     }
 
-    public static void setDebtorNumber(String debtorNumber) {
-        SettleSalary.debtorNumber = debtorNumber;
+    public List<TransactionEntity> getTransactionEntities() {
+        return transactionEntities;
     }
 
-    public static String getDebtorNumber() {
-        return debtorNumber;
-    }
-
-    public static List<TransactionEntity> getTransactionEnties() {
-        return SettleSalary.transactionEntities;
-    }
-
-    public List<BalanceEntity> getBalanceEntities() {
+    public static List<BalanceEntity> getBalanceEntities() {
         return balanceEntities;
-    }
-
-    public static void setTransactionEntities(List<TransactionEntity> transactionEntities) {
-        SettleSalary.transactionEntities = transactionEntities;
     }
 
     public static void setBalanceEntities(List<BalanceEntity> balanceEntities) {
@@ -56,40 +61,117 @@ public class SettleSalary extends Thread {
         return payEntity;
     }
 
+    public void setPayEntity(PayEntity payEntity) {
+        this.payEntity = payEntity;
+    }
+
+    public static String getDebtorDepositNumber() {
+        return debtorDepositNumber;
+    }
+
+    public static void setDebtorDepositNumber(String debtorDepositNumber) {
+        SettleSalary.debtorDepositNumber = debtorDepositNumber;
+    }
+
     @Override
     public String toString() {
         return "SettleSalary{" +
                 "balanceEntities=" + balanceEntities +
-                ", payEntities=" + payEntity +
+                ", payEntities=" + payEntity
+                +
                 '}';
     }
 
-    @Override
-    public void run() {
-        if (this.payEntity.getDepositType().equals("creditor")) {
-            String creatorNumber = this.payEntity.getDepositNumber();
-            BigDecimal creatorMoney = this.payEntity.getAmount();
-            for (int i = 0; i < balanceEntities.size(); i++) {
-                if (balanceEntities.get(i).getDepositNumber().equals(creatorNumber)) {
-                    balanceEntities.get(i).setAmount(balanceEntities.get(i).getAmount().add(creatorMoney));
-                    balanceEntities.get(i).setCheckedWrite(true);
-                    transactionEntities.get(i).setAmount(creatorMoney);
-                    transactionEntities.get(i).setDebtorDepositNumber(SettleSalary.debtorNumber);
-                    transactionEntities.get(i).setCreditorDepositNumber(balanceEntities.get(i).getDepositNumber());
-                    transactionEntities.get(i).setChecked(true);
+    public String call() throws IOException, DepositBalanceNotEnough, InterruptedException {
+        BasicConfigurator.configure();
+        if (payEntity.getDepositType().equals("creditor")) {
+            String creatorNumber = payEntity.getDepositNumber();
+            BigDecimal creatorMoney = payEntity.getAmount();
+            for (BalanceEntity balanceEntity : this.balanceEntities) {
+                if (balanceEntity.getDepositNumber().equals(creatorNumber)) {
+                    balanceEntity.setAmount(balanceEntity.getAmount().add(creatorMoney));
+                    setToBalance(balanceEntity);
+                    setToDebtor(creatorMoney);
+                    TransactionEntity transactionEntity = new TransactionEntity();
+                    transactionEntity.setDebtorDepositNumber(debtorDepositNumber);
+                    transactionEntity.setCreditorDepositNumber(balanceEntity.getDepositNumber());
+                    transactionEntity.setAmount(creatorMoney);
+                    setToTransaction(transactionEntity);
                     break;
                 }
             }
         }
-        setBalanceEntities(balanceEntities);
+
+        return null;
     }
 
-    public static void calculatorDebtorMoney(List<BalanceEntity> balanceEntities) {
-        for (BalanceEntity balanceEntity : balanceEntities) {
-            if (balanceEntity.getDepositNumber().equals(SettleSalary.debtorNumber)) {
-                balanceEntity.setAmount(balanceEntity.getAmount().subtract(SettleSalary.debtorSumMoney));
-                break;
+    public synchronized void setToBalance(BalanceEntity balanceEntity) throws InterruptedException, DepositBalanceNotEnough, IOException {
+
+        if (permition) {
+            permition = false;
+
+            FileWriters fileWriters = new FileWriters();
+
+            fileWriters.writeToBalance(balanceEntity);
+            permition = true;
+
+        } else {
+            Thread.sleep(1);
+            setToBalance(balanceEntity);
+        }
+
+
+    }
+
+    public synchronized void setToDebtor(BigDecimal DebtorMoney) throws InterruptedException, DepositBalanceNotEnough, IOException {
+
+        if (SettleSalary.debtorSumMoney == null) {
+            SettleSalary.debtorSumMoney = BigDecimal.ZERO;
+
+        }
+        if (debtorPermition) {
+            debtorPermition = false;
+
+            debtorCounter++;
+            SettleSalary.debtorSumMoney = SettleSalary.debtorSumMoney.add(DebtorMoney);
+
+            if (debtorCounter == balanceEntities.size() - 1) {
+                for (BalanceEntity balanceEntity : SettleSalary.balanceEntities) {
+                    if (balanceEntity.getDepositNumber().equals(SettleSalary.debtorDepositNumber)) {
+                        BigDecimal nowDebtorMoney = balanceEntity.getAmount();
+                        balanceEntity.setAmount(nowDebtorMoney.subtract(SettleSalary.debtorSumMoney));
+                        setToBalance(balanceEntity);
+                        break;
+                    }
+
+                }
             }
+
+
+            debtorPermition = true;
+
+
+        } else {
+            Thread.sleep(1);
+            setToDebtor(DebtorMoney);
+        }
+
+
+    }
+
+    public synchronized void setToTransaction(TransactionEntity transaction) throws InterruptedException, DepositBalanceNotEnough, IOException {
+
+        if (permitionForTransaction) {
+            permitionForTransaction = false;
+            FileWriters fileWriters = new FileWriters();
+            fileWriters.writeToTransaction(transaction);
+            permitionForTransaction = true;
+        } else {
+            Thread.sleep(1);
+            setToTransaction(transaction);
         }
     }
 }
+
+
+

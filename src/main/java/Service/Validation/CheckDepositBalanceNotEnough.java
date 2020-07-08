@@ -29,7 +29,7 @@ public class CheckDepositBalanceNotEnough extends DepositBalanceNotEnough {
                 sumOfCreditorBalance = sumOfCreditorBalance.add(payEntity.getAmount());
         }
 
-        if (debtorBalance.compareTo(sumOfCreditorBalance) == -1)
+        if (sumOfCreditorBalance.compareTo(debtorBalance) > 0)
             throw new DepositBalanceNotEnough(debtorDepositNumber);
     }
 }
