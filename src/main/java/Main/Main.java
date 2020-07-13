@@ -93,19 +93,13 @@ public class Main {
         debtorForPay.setDepositNumber("1.10.100.1");
         payEntities.add(debtorForPay);
         FileWriters fileWriters = new FileWriters();
+
         try {
             fileWriters.writeToBalance(balanceEntities);
-        } catch (IOException e) {
-            e.printStackTrace();
-        } catch (DepositBalanceNotEnough e) {
-            e.printStackTrace();
-        }
-        try {
             fileWriters.writeToPay(payEntities);
-        } catch (IOException e) {
-            e.printStackTrace();
-        } catch (DepositBalanceNotEnough e) {
+        } catch (IOException | DepositBalanceNotEnough e) {
             e.printStackTrace();
         }
+
     }
 }
